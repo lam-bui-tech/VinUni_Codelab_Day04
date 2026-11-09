@@ -1,0 +1,37 @@
+[
+  {
+    "id": "KB-001",
+    "topic": "bao_hanh",
+    "title": "Chính sách bảo hành pin xe điện VinFast",
+    "content": "VinFast áp dụng chính sách bảo hành pin xe điện lên tới 10 năm hoặc 200.000 km (tùy điều kiện nào đến trước) cho các dòng xe VF 5, VF 6, VF 7, VF 8, VF 9 và 7-8 năm cho VF 3. Nếu dung lượng pin sụt giảm dưới 70% trong thời hạn bảo hành, VinFast sẽ sửa chữa hoặc thay thế cụm pin miễn phí cho khách hàng.",
+    "keywords": ["bảo hành", "pin", "10 năm", "200.000 km", "chai pin", "sụt pin", "thay pin", "70%"]
+  },
+  {
+    "id": "KB-002",
+    "topic": "bao_hanh",
+    "title": "Chính sách bảo hành xe và phụ tùng VinFast",
+    "content": "Xe điện VinFast được bảo hành chính hãng 10 năm hoặc 200.000 km đối với khung gầm và hệ truyền động. Phụ tùng thay thế chính hãng được bảo hành 2 năm hoặc 40.000 km. Khách hàng được phục vụ tại toàn bộ xưởng dịch vụ VinFast trên toàn quốc.",
+    "keywords": ["bảo hành xe", "phụ tùng", "khung gầm", "xưởng dịch vụ", "hạn bảo hành"]
+  },
+  {
+    "id": "KB-003",
+    "topic": "tram_sac",
+    "title": "Mạng lưới trạm sạc V-GREEN và hướng dẫn sạc",
+    "content": "Hệ thống trạm sạc V-GREEN của VinFast phủ sóng 63 tỉnh thành với các cổng sạc AC 11kW, DC 30kW, DC 60kW, DC 150kW và Supercharge 250kW-360kW. Người dùng có thể tìm trạm sạc, kiểm tra cổng trống và đặt lịch sạc trực tiếp qua ứng dụng VinFast trên điện thoại. Chi phí sạc công cộng là 3.858 VNĐ/kWh (đã gồm VAT).",
+    "keywords": ["trạm sạc", "v-green", "cổng sạc", "sạc nhanh", "chi phí sạc", "giá sạc", "supercharge", "app vinfast"]
+  },
+  {
+    "id": "KB-004",
+    "topic": "cuu_ho",
+    "title": "Dịch vụ cứu hộ 24/7 và sửa chữa lưu động Mobile Service",
+    "content": "VinFast cung cấp dịch vụ cứu hộ pin và cứu hộ kỹ thuật miễn phí 24/7 trong thời gian bảo hành qua hotline 1900-232389. Xe cứu hộ trang bị máy sạc lưu động sẽ có mặt hỗ trợ khi xe cạn pin trên đường hoặc gặp sự cố khẩn cấp, hỗ trợ cẩu kéo về xưởng gần nhất.",
+    "keywords": ["cứu hộ", "24/7", "hết pin", "kéo xe", "mobile service", "sửa chữa lưu động", "hotline", "khẩn cấp"]
+  },
+  {
+    "id": "KB-005",
+    "topic": "vinpearl",
+    "title": "Chính sách nhận phòng, đưa đón và vui chơi tại Vinpearl",
+    "content": "Khách sạn và resort Vinpearl áp dụng giờ check-in tiêu chuẩn 14:00 và check-out 12:00. Các gói nghỉ dưỡng tại Phú Quốc và Nha Trang thường bao gồm xe bus đưa đón sân bay miễn phí, vé vào cửa không giới hạn tổ hợp giải trí VinWonders và Safari, cùng buffet sáng cao cấp chuẩn quốc tế.",
+    "keywords": ["vinpearl", "check-in", "check-out", "đưa đón sân bay", "vinwonders", "safari", "buffet", "vé vui chơi"]
+  }
+]

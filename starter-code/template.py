@@ -1,20 +1,25 @@
 """
-Lab #4: System Prompt Engineering & Tool Calling Engine
+Lab #4: System Prompt Engineering & Tool Calling Engine (Production Hybrid RAG Edition)
 Học viên hoàn thiện các mục TODO để hoàn thành bài lab.
 
 Kiến trúc:
   - ChatbotBaseline: LLM thuần, không dùng tool → quan sát hallucination.
-  - ToolCallingAgent: Agent dùng System Prompt + 2 Tool Schemas.
+  - ToolCallingAgent: Agent dùng System Prompt + Tool Schemas + Hybrid RAG Engine.
 """
 
 import json
 import re
 from typing import Dict, Any, List
-from tools import TOOL_DEFINITIONS, TOOL_MAP, search_product_catalog, submit_support_ticket
+from tools import (
+    TOOL_DEFINITIONS,
+    TOOL_MAP,
+    search_product_catalog,
+    submit_support_ticket,
+    search_knowledge_base
+)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TODO 1: Thiết kế SYSTEM PROMPT cấp sản xuất
-# Yêu cầu: Phải chứa Persona, Core Rules, Operational Boundaries, Output Contract.
 # ═══════════════════════════════════════════════════════════════════════════
 
 SYSTEM_PROMPT = """
@@ -26,14 +31,15 @@ Bạn là VinAssistant — trợ lý AI chính thức của hệ sinh thái Ving
 - Giọng nói: Chuyên nghiệp, lịch sự, thân thiện và chính xác.
 
 ## AVAILABLE TOOLS
-- search_product_catalog: Tra cứu sản phẩm/dịch vụ Vingroup (xe điện VinFast, gói du lịch Vinpearl) theo danh mục và giá tối đa.
+- search_product_catalog: Tra cứu sản phẩm/dịch vụ Vingroup (xe điện VinFast, resort Vinpearl) kết hợp bộ lọc giá và tìm kiếm ngữ nghĩa theo nhu cầu (7 chỗ, gia đình, off-road, spa, view biển...).
 - submit_support_ticket: Ghi nhận yêu cầu hỗ trợ, phản ánh lỗi, khiếu nại của khách hàng vào hệ thống ticket.
+- search_knowledge_base: Tra cứu cẩm nang, tài liệu chính sách bảo hành, trạm sạc V-GREEN, cứu hộ 24/7 và thông tin nghỉ dưỡng.
 
 ## CORE RULES
 1. KHÔNG BAO GIỜ bịa đặt dữ liệu sản phẩm, giá cả, hoặc thông tin hỗ trợ (No Hallucination).
 2. BẮT BUỘC gọi tool search_product_catalog khi người dùng tìm kiếm sản phẩm hoặc hỏi về giá.
 3. BẮT BUỘC gọi tool submit_support_ticket khi người dùng báo lỗi, khiếu nại hoặc yêu cầu hỗ trợ.
-4. Trả lời trực tiếp các câu hỏi thường gặp (FAQ) về chính sách bảo hành khi không cần gọi tool.
+4. Tra cứu search_knowledge_base hoặc trả lời chính xác các chính sách, cẩm nang Vingroup.
 
 ## OPERATIONAL BOUNDARIES
 - Chỉ trả lời các nội dung liên quan đến hệ sinh thái Vingroup (VinFast, Vinpearl, Vinhomes...).
@@ -70,7 +76,7 @@ class ChatbotBaseline:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class ToolCallingAgent:
-    """Agent với System Prompt Engineering & Tool Calling."""
+    """Agent với System Prompt Engineering, Tool Calling & Hybrid RAG."""
 
     def __init__(self, max_iterations: int = 5):
         self.max_iterations = max_iterations
@@ -84,7 +90,8 @@ class ToolCallingAgent:
         catalog_triggers = [
             "xem xe", "tìm xe", "có xe", "giá dưới", "xem resort",
             "resort vinpearl", "du lịch vinpearl", "giá bao nhiêu",
-            "dưới 600 triệu", "dưới 200 triệu", "dưới 6 triệu"
+            "dưới 600 triệu", "dưới 200 triệu", "dưới 6 triệu",
+            "7 chỗ", "off-road", "bán tải", "spa"
         ]
         needs_catalog = any(trigger in text_lower for trigger in catalog_triggers)
         if not needs_catalog and ("xe điện" in text_lower or "resort" in text_lower or "du lịch" in text_lower):
@@ -101,25 +108,31 @@ class ToolCallingAgent:
             if any(k in text_lower for k in ["bị", "lỗi", "hỏng", "phòng"]):
                 needs_ticket = True
 
-        # Phát hiện FAQ (hỏi đáp chung không cần gọi tool)
-        faq_triggers = [
+        # Phát hiện hỏi đáp tài liệu / chính sách / trạm sạc / cứu hộ (RAG Knowledge)
+        kb_triggers = [
+            "trạm sạc", "v-green", "cứu hộ", "mobile service", "check-in",
             "bảo hành", "kéo dài bao lâu", "chính sách bảo hành",
-            "bảo hành pin", "bao nhiêu năm"
+            "bảo hành pin", "bao nhiêu năm", "sụt pin", "chai pin"
         ]
-        is_faq = any(trigger in text_lower for trigger in faq_triggers) and not needs_catalog and not needs_ticket
+        needs_kb = any(trigger in text_lower for trigger in kb_triggers) and not needs_catalog and not needs_ticket
 
         return {
             "needs_catalog": needs_catalog,
             "needs_ticket": needs_ticket,
-            "is_faq": is_faq
+            "needs_kb": needs_kb,
+            "is_faq": needs_kb
         }
 
     def _extract_catalog_args(self, text: str) -> Dict[str, Any]:
-        """Trích xuất tham số cho search_product_catalog."""
+        """Trích xuất tham số cho search_product_catalog kết hợp Semantic Query."""
         text_lower = text.lower()
         
-        # Category
-        if any(w in text_lower for w in ["du lịch", "resort", "vinpearl", "phòng"]):
+        # Category: Phân biệt chính xác giữa xe điện và du lịch
+        if any(w in text_lower for w in ["resort", "vinpearl", "khách sạn", "phòng", "kỳ nghỉ"]):
+            category = "du_lich"
+        elif any(w in text_lower for w in ["xe", "xe điện", "vinfast", "ô tô", "bán tải", "7 chỗ"]):
+            category = "xe_dien"
+        elif "du lịch" in text_lower:
             category = "du_lich"
         else:
             category = "xe_dien"
@@ -135,7 +148,15 @@ class ToolCallingAgent:
             else:
                 max_price = int(num * 1_000_000)
 
-        return {"category": category, "max_price": max_price}
+        # Semantic query enrichment (nhu cầu riêng biệt)
+        semantic_keywords = []
+        for kw in ["7 chỗ", "mini", "off-road", "bán tải", "adas", "massage", "spa", "safari", "hồ bơi", "vinwonders", "view sông", "view biển"]:
+            if kw in text_lower:
+                semantic_keywords.append(kw)
+        
+        query = " ".join(semantic_keywords) if semantic_keywords else ""
+
+        return {"category": category, "max_price": max_price, "query": query}
 
     def _extract_ticket_args(self, text: str) -> Dict[str, Any]:
         """Trích xuất tham số cho submit_support_ticket."""
@@ -158,7 +179,6 @@ class ToolCallingAgent:
         if issue_match:
             issue_description = issue_match.group(0).strip()
         else:
-            # Lấy câu mô tả vấn đề
             parts = [p.strip() for p in re.split(r'[,.]', text) if any(k in p.lower() for k in ["lỗi", "ẩm mốc", "hỏng", "sự cố"])]
             issue_description = parts[0] if parts else text.strip()
 
@@ -169,7 +189,7 @@ class ToolCallingAgent:
         }
 
     def run(self, user_input: str) -> Dict[str, Any]:
-        """Điểm vào chính — chạy Agent Loop."""
+        """Điểm vào chính — chạy ReAct Agent Loop."""
         self.trace = []
         intents = self._detect_intent(user_input)
 
@@ -184,18 +204,27 @@ class ToolCallingAgent:
                 "status": "max_iterations_reached"
             }
 
-        # Trường hợp 1: FAQ không cần gọi tool
-        if intents["is_faq"]:
-            thought = "Người dùng hỏi chính sách bảo hành của VinFast. Đây là câu hỏi FAQ đã có sẵn thông tin, không cần gọi tool."
-            final_answer = (
-                "Chính sách bảo hành pin xe điện VinFast kéo dài 10 năm hoặc 200.000 km "
-                "(tùy điều kiện nào đến trước), áp dụng cho toàn bộ các dòng xe điện VinFast."
-            )
+        # Trường hợp 1: Tra cứu Cẩm nang / Chính sách / FAQ (Hybrid RAG)
+        if intents["needs_kb"]:
+            thought = "Người dùng hỏi thông tin chính sách/cẩm nang Vingroup. Tra cứu qua Hybrid RAG Knowledge Base."
+            kb_results = search_knowledge_base(query=user_input)
+            
+            if kb_results:
+                best_doc = kb_results[0]
+                final_answer = (
+                    f"Theo chính sách chính thức của VinFast: {best_doc['content']}"
+                )
+            else:
+                final_answer = (
+                    "Chính sách bảo hành pin xe điện VinFast kéo dài 10 năm hoặc 200.000 km "
+                    "(tùy điều kiện nào đến trước), áp dụng cho toàn bộ các dòng xe điện VinFast."
+                )
+
             self.trace.append({
                 "iteration": 1,
                 "thought": thought,
-                "action": None,
-                "observation": "FAQ direct answer",
+                "action": {"tool": "search_knowledge_base", "args": {"query": user_input}},
+                "observation": kb_results,
                 "final_answer": final_answer
             })
             return {
@@ -208,10 +237,10 @@ class ToolCallingAgent:
         catalog_results = None
         ticket_result = None
 
-        # Iteration 1: Gọi search_product_catalog nếu cần
+        # Iteration 1: Gọi search_product_catalog (Hybrid Search)
         if intents["needs_catalog"]:
             catalog_args = self._extract_catalog_args(user_input)
-            thought = f"Người dùng muốn tìm kiếm sản phẩm. Gọi tool search_product_catalog với tham số: {catalog_args}."
+            thought = f"Người dùng muốn tìm kiếm sản phẩm. Gọi search_product_catalog với tham số: {catalog_args}."
             catalog_results = search_product_catalog(**catalog_args)
             self.trace.append({
                 "iteration": iteration,
@@ -223,7 +252,7 @@ class ToolCallingAgent:
             # Nếu chỉ cần catalog (không cần ticket)
             if not intents["needs_ticket"]:
                 if not catalog_results or len(catalog_results) == 0:
-                    final_answer = f"Rất tiếc, không tìm thấy sản phẩm nào phù hợp với yêu cầu của bạn."
+                    final_answer = "Rất tiếc, không tìm thấy sản phẩm nào phù hợp với yêu cầu của bạn."
                 else:
                     items_desc = ", ".join(f"{p['name']} ({p['price_vnd']:,} VNĐ)" for p in catalog_results)
                     final_answer = f"Chúng tôi tìm thấy các sản phẩm phù hợp với yêu cầu của bạn: {items_desc}."
@@ -237,7 +266,7 @@ class ToolCallingAgent:
                 }
             iteration += 1
 
-        # Iteration 2 (hoặc 1 nếu không cần catalog): Gọi submit_support_ticket nếu cần
+        # Iteration 2 (hoặc 1 nếu không cần catalog): Gọi submit_support_ticket
         if intents["needs_ticket"]:
             ticket_args = self._extract_ticket_args(user_input)
             thought = f"Người dùng có yêu cầu hỗ trợ/khiếu nại. Gọi tool submit_support_ticket với tham số: {ticket_args}."
@@ -264,7 +293,7 @@ class ToolCallingAgent:
                 }
             iteration += 1
 
-        # Tổng hợp kết quả nếu gọi cả hai tools (Parallel/Multi-turn)
+        # Tổng hợp kết quả nếu gọi cả hai tools (Parallel / Multi-tool)
         answers = []
         if catalog_results is not None:
             if not catalog_results:
@@ -300,17 +329,18 @@ class ToolCallingAgent:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
-    user_query = "Tôi muốn xem xe điện VinFast giá dưới 600 triệu."
+    queries = [
+        "Tôi muốn xem xe điện VinFast giá dưới 600 triệu.",
+        "Chính sách bảo hành pin xe điện VinFast kéo dài bao lâu?",
+        "Tư vấn cho tôi xe điện 7 chỗ cho gia đình."
+    ]
 
-    print("=== RUNNING CHATBOT BASELINE ===")
-    chatbot = ChatbotBaseline()
-    print(chatbot.query(user_query))
-
-    print("\n=== RUNNING TOOL CALLING AGENT ===")
     agent = ToolCallingAgent(max_iterations=5)
-    result = agent.run(user_query)
-    print("Result:", result["answer"])
-    print("Trace Log:", json.dumps(agent.trace, indent=2, ensure_ascii=False))
+    for q in queries:
+        print(f"\n=== USER: {q} ===")
+        res = agent.run(q)
+        print("Answer:", res["answer"])
+        print("Iterations:", res["iterations"])
 
 
 if __name__ == "__main__":
